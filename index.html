@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
+    <style>
+        /* Inicialmente, esconde todos os cards */
+        .card {
+            display: none;
+        }
+    </style>
+</head>
+<body style="background: rgb(43, 43, 43);">
+    <header style="background: blue; padding: 10px;">
+        <h2 style="color: white; text-align: center;">Usuários</h2>
+    </header>
+
+    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 20px; height: 100%;">
+        <!-- Grupo de Usuários Ativados -->
+        <h3 class="text-white">Usuários Ativados</h3>
+        <div id="activeCardsContainer" style="margin-top: 20px;"></div>
+        
+        <hr class="text-white" style="width: 80%;">
+
+        <!-- Grupo de Usuários Desativados -->
+        <h3 class="text-white">Usuários Desativados</h3>
+        <div id="inactiveCardsContainer" style="margin-top: 20px;"></div>
+    </div>
+
+    <script>
+        // Configuração do Firebase
+        var firebaseConfig = {
+            apiKey: "AIzaSyDPqYDtJkEYhAQrlsTSiAs8KFEk0y5MkDE",
+            authDomain: "cultura-itapeva.firebaseapp.com",
+            projectId: "cultura-itapeva",
+            storageBucket: "cultura-itapeva.appspot.com",
+            messagingSenderId: "529806926154",
+            appId: "1:529806926154:web:1b4802c27d3ad0353221b3",
+            measurementId: "G-560B3GR1PL"
+        };
+        // Inicializa o Firebase
+        firebase.initializeApp(firebaseConfig);
+        var database = firebase.database();
+        var storage = firebase.storage(); // Inicializa o Storage
+
+        // Função para carregar membros
+        function loadMembros() {
+            const membersRef = database.ref('membros');
+            membersRef.once('value').then((snapshot) => {
+                if (snapshot.exists()) {
+                    snapshot.forEach((childSnapshot) => {
+                        const memberData = childSnapshot.val();
+                        const memberName = memberData.Nome; // Assume que o nó do nome é "Nome"
+                        const memberStatus = memberData.status; // Assume que o nó do status é "status"
+                        const memberEmail = memberData["e-mail"]; // Assume que o nó do e-mail é "e-mail"
+                        
+                        console.log(`Nome: ${memberName}, Status: ${memberStatus}, E-mail: ${memberEmail}`); // Depuração
+
+                        // Cria o card dependendo do status
+                        if (memberStatus === "ativado") {
+                            createCard(memberName, true); // true indica que é um membro ativado
+                        } else {
+                            createCard(memberName, false, memberEmail); // Passa o e-mail para o card desativado
+                        }
+                    });
+                } else {
+                    console.log('Nenhum membro encontrado'); // Se não houver membros
+                }
+            }).catch((error) => {
+                console.error('Erro ao carregar membros:', error); // Log de erro
+            });
+        }
+
+        // Função para criar um card
+        async function createCard(memberName, isActive, memberEmail) {
+            let cardHTML = `
+                <div class="card" style="width: 18rem; margin-top: 10px;">
+                    <div class="card-body">
+            `;
+
+            // Adiciona a imagem acima do nome do usuário para membros desativados
+            if (!isActive) {
+                const imageName = memberEmail.split('@')[0]; // Remove o domínio do e-mail
+                const imagePathBase = `imagem_usuarios/${imageName}`; // Define o caminho base da imagem
+                const extensions = ['.jpg', '.png', '.jpeg', '.gif']; // Extensões possíveis
+                let imageURL;
+
+                // Tenta buscar a imagem com diferentes extensões
+                for (const ext of extensions) {
+                    try {
+                        const fullPath = `${imagePathBase}${ext}`; // Caminho completo
+                        imageURL = await storage.ref(fullPath).getDownloadURL(); // Tenta obter a URL
+                        break; // Sai do loop se a URL foi obtida
+                    } catch (error) {
+                        // Se não encontrar, continua para a próxima extensão
+                        console.error(`Imagem não encontrada: ${fullPath}`); // Para depuração
+                    }
+                }
+
+                // Se a imagem foi encontrada, cria a tag <img>
+                if (imageURL) {
+                    cardHTML += `<img src="${imageURL}" alt="${memberName}'s photo" class="img-fluid" style="max-height: 150px; width:100%; object-fit: cover; margin-bottom: 10px;">`;
+                } else {
+                    // Se nenhuma imagem foi encontrada, mostra um espaço reservado
+                    cardHTML += `<img src="path/to/default-image.jpg" alt="Imagem não encontrada" class="img-fluid" style="max-height: 150px; object-fit: cover; margin-bottom: 10px;">`;
+                }
+            }
+
+            // Adiciona o nome e o status
+            cardHTML += `
+                        <h5 class="card-title">${memberName}</h5>
+                        <p class="card-text"><strong>Status:</strong> ${isActive ? 'Ativado' : 'Desativado'}</p>
+            `;
+
+            // Adiciona o e-mail apenas para membros desativados
+            if (!isActive && memberEmail) {
+                cardHTML += `<p style="font-size: 12px;" class="card-text"><strong>E-mail:</strong> ${memberEmail}</p>`;
+            }
+
+            cardHTML += `
+                    </div>
+                    <div class="card-body">
+                        <button type="button" class="btn btn-success">Ativar</button>
+                        <button type="button" class="btn btn-danger">Apagar</button>
+                    </div>
+                </div>
+            `;
+
+            const container = isActive ? 'activeCardsContainer' : 'inactiveCardsContainer';
+            document.getElementById(container).innerHTML += cardHTML;
+
+            // Mostra o card após a criação
+            document.querySelector(`#${container} .card:last-child`).style.display = 'block'; 
+        }
+
+        // Carrega os membros ao iniciar
+        loadMembros();
+    </script>
+</body>
+</html>
